@@ -17,9 +17,6 @@ data = []
 value = 0
 
 
-def mean_square_root(array):
-    msr = np.sqrt(np.mean(array ** 2))
-    return msr
 
 # while t < 40:
 #     myrecording = sd.rec(int(fs*duration), samplerate=fs)
