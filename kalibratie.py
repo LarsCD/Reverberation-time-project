@@ -51,6 +51,7 @@ def perform_raw_recodring(duration):
     print('Recording succesful')
     return raw_recording
 
+
 # turn raw recording into dB recording
 def raw_recording_to_dB_recording(raw_recording):
     intensiteit_ongekalibreerd = np.absolute(raw_recording)
@@ -70,7 +71,7 @@ def raw_recording_to_dB_recording(raw_recording):
 
     intensiteit_toppen = np.array(intensiteit_toppen)
 
-    dB_recording = (np.log((intensiteit_ongekalibreerd)/(1*(10**-6)))/0.1141)*correctiefactor_2
+    dB_recording = (np.log((intensiteit_ongekalibreerd)/(1*(10**-6)))/0.1141)*correctiefactor_experimenteel
     return dB_recording
 
 
@@ -80,7 +81,7 @@ raw_recording = perform_raw_recodring(duration)
 dB_recording = raw_recording_to_dB_recording(raw_recording)
 
 
-xpoints = np.linspace(0, duration, len(np.absolute(raw_recording)))
+xpoints = np.linspace(0, duration, len(np.absolute(dB_recording)))
 ypoints = dB_recording
 
 x2 = np.linspace(0, duration, len(np.absolute(raw_recording)))

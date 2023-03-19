@@ -1,10 +1,13 @@
 # Project 1.3 - Groep A5 - Nagalmtijd Software v0.1
-import sounddevice as sd
+import time
 import numpy as np
+import sounddevice as sd
+import matplotlib.pyplot as plt
+import csv
 
 
 #  de 'main' class houdt alle basis structuur van de code, zoals variabelen en de 'main_loop'
-class main:
+class Main:
     def __init__(self):
         self.run_program = True
         # TODO: add variables
@@ -18,6 +21,13 @@ class main:
         # TODO: code
 
 
+    # gebruik voor veel testjes achter elkaar doen
+    def test_loop(self):
+        while self.run_program == True:
+            mic = Microphone()
+            mic.perform_test_recording()
+
+
     #  de 'recording_loop' is de loop die wordt re-runt voor elke enkele meting
     # return: dB np.array()
     def recording_loop(self):
@@ -29,13 +39,14 @@ class main:
 
 
 # de 'microphone' class houdt alle functies die er voor nodig zijn om een opname met de microfoon te doen
-class microphone:
+class Microphone:
     def __init__(self):
         self.frames = 44100             # (Hz): frequentie van opnamen (standaard waarde)
-        self.sd.default.channels = 1    # hoeveel kanelen beschikbaar voor opname (laat 1)
-        self.sd.default.device = 'Microphone (USB Audio Device)'    # selecteren de juiste microfoon
+        sd.default.channels = 1    # hoeveel kanelen beschikbaar voor opname (laat 1)
+        sd.default.device = 'Microphone (USB Audio Device)'    # selecteren de juiste microfoon
         self.test_recording_duration = 10   # hoeveel seconde lang is de test_recording
-        self.pre_recording_sleep_time = 1.5 # hoelang wachten tot recording start
+        self.pre_recording_sleep_time = 3 # hoelang wachten tot recording start
+        print(sd.query_devices())
 
 
     # doet een (rauwe) opnamen van geluid voor een bepaald aantal aangegeven secondes ('duration')
@@ -45,6 +56,7 @@ class microphone:
         raw_recording = sd.rec(int(frames * duration), samplerate=frames)
         sd.wait()
         return raw_recording
+
 
     # veranderd de 'raw_recording' naar een gecorigeerde en gekalibreerde dB array
     # return np.array()
@@ -61,7 +73,7 @@ class microphone:
 
 
     def perform_test_recording(self):
-        print('-'*30)
+        print('-'*60)
         print('Started recording test')
         click = input(f'[ENTER]: START RECORDIING ({self.test_recording_duration}s)')
         print(f'Recording starts in {self.pre_recording_sleep_time}s')
@@ -78,35 +90,39 @@ class microphone:
             print('ERROR DURING DATA VERWERKING (dB_recording):')
             print(e)
         try:
-            plot.plot_dB(dB_recording)
+            plot = Plot()
+            plot.plot_dB(self.test_recording_duration, dB_recording)
+            plot.plot_Int(self.test_recording_duration, raw_recording)
         except Exception as e:
             print('ERROR DURING DATA VISUALISATION (plot.plot_dB):')
             print(e)
         print('End of recording test')
-        print('-' * 30)
+        print('-' * 60)
 
 
 
 # de 'user_input' class houdt alle functies die er voor nodig zijn om een opname met de microfoon te doen
-class user_input:
+class User_interface:
     def __init__(self):
         pass
 
 
 # de 'plot' class zorgt voor snel plotten waar dat nodig is
-class plot:
+class Plot:
     def __init__(self):
         pass
 
+
     # plot dB niveau verkregen met dB_recording
     def plot_dB(self, duration, dB_recording):
-        xpoints = np.linspace(0, duration, len(np.absolute(raw_recording)))
+        xpoints = np.linspace(0, duration, len(np.absolute(dB_recording)))
         ypoints = dB_recording
         plt.plot(xpoints, ypoints, label='Decibel over tijd')
         plt.title('dB over tijd')
         plt.ylabel('Geluidsniveau [dB]')
         plt.xlabel('Tijd [s]')
         plt.show()
+
 
     # plot de intensiteit gemeten vanaf de microfoon
     def plot_Int(self, duration, raw_recording):
@@ -119,5 +135,8 @@ class plot:
         plt.show()
 
 
-microphone.perform_test_recording()
+main = Main()
+main.test_loop()
 
+# mic = Microphone()
+# mic.perform_test_recording()
