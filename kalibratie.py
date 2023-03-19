@@ -15,7 +15,8 @@ sd.default.device = 'Microphone (USB Audio Device)'
 recording = np.empty(0)
 data = []
 value = 0
-
+print(sd.query_devices())
+print('')
 
 
 # while t < 40:
@@ -43,6 +44,7 @@ def perform_raw_recodring(duration):
     print(f'Device:  \'{sd.default.device}\'')
     print(f'Duration: {duration}s')
     start = input('Press [ENTER] to start recording')
+    time.sleep(1)
     print(f'Recording...    ({duration}s)')
     raw_recording = sd.rec(int(fs*duration), samplerate=fs)
     sd.wait()
@@ -78,10 +80,10 @@ raw_recording = perform_raw_recodring(duration)
 dB_recording = raw_recording_to_dB_recording(raw_recording)
 
 
-xpoints = np.linspace(0, 79, len(np.absolute(raw_recording)))
+xpoints = np.linspace(0, duration, len(np.absolute(raw_recording)))
 ypoints = dB_recording
 
-x2 = np.linspace(0, 79, len(np.absolute(raw_recording)))
+x2 = np.linspace(0, duration, len(np.absolute(raw_recording)))
 y2 = np.absolute(raw_recording)
 
 # print(xpoints)
@@ -100,5 +102,3 @@ plt.title('Intensiteit over tijd')
 plt.ylabel('Intensiteit [W/m2] (0 tot 1)')
 plt.xlabel('Tijd [s]')
 plt.show()
-
-
