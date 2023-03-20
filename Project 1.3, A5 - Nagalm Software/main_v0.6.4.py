@@ -1,9 +1,11 @@
 # Project 1.3 - Groep A5 - Nagalmtijd Software v0.1
 import time
 import numpy as np
+import scipy.ndimage
 import sounddevice as sd
 import matplotlib.pyplot as plt
 import csv
+from scipy.signal import argrelextrema
 
 
 #  de 'main' class houdt alle basis structuur van de code, zoals variabelen en de 'main_loop'
@@ -44,8 +46,8 @@ class Microphone:
         self.frames = 44100             # (Hz): frequentie van opnamen (standaard waarde)
         sd.default.channels = 1    # hoeveel kanelen beschikbaar voor opname (laat 1)
         sd.default.device = 'Microphone (USB Audio Device)'    # selecteren de juiste microfoon
-        self.test_recording_duration = 10   # hoeveel seconde lang is de test_recording
-        self.pre_recording_sleep_time = 3 # hoelang wachten tot recording start
+        self.test_recording_duration = 2   # hoeveel seconde lang is de test_recording
+        self.pre_recording_sleep_time = 0.5 # hoelang wachten tot recording start
         print(sd.query_devices())
 
 
@@ -72,6 +74,20 @@ class Microphone:
         return dB_recording
 
 
+    def filter_dB(self, dB_recording):
+        corrected_dB_list = []
+        for item in dB_recording:
+            corrected_dB_list.append(float(item))
+        corrected_dB = np.asarray(corrected_dB_list)
+        print(corrected_dB)
+        corrected_dB[corrected_dB < -1e308] = 0.00001
+        print(corrected_dB)
+        dB_recording_peaks = scipy.signal.find_peaks(corrected_dB, threshold=0.1, height=0.1, distance=600)
+        print(dB_recording_peaks)
+        peaks = corrected_dB[dB_recording_peaks[0]]
+        return peaks
+
+
     def perform_test_recording(self):
         print('-'*60)
         print('Started recording test')
@@ -79,23 +95,25 @@ class Microphone:
         print(f'Recording starts in {self.pre_recording_sleep_time}s')
         time.sleep(self.pre_recording_sleep_time)
         print('Recording...')
-        try:
-            raw_recording = self.record_raw(self.test_recording_duration, self.frames)
-        except Exception as e:
-            print('ERROR DURING RECORDING:')
-            print(e)
-        try:
-            dB_recording = self.raw_recording_to_dB_recording(raw_recording)
-        except Exception as e:
-            print('ERROR DURING DATA VERWERKING (dB_recording):')
-            print(e)
-        try:
-            plot = Plot()
-            plot.plot_dB(self.test_recording_duration, dB_recording)
-            plot.plot_Int(self.test_recording_duration, raw_recording)
-        except Exception as e:
-            print('ERROR DURING DATA VISUALISATION (plot.plot_dB):')
-            print(e)
+        # try:
+        raw_recording = self.record_raw(self.test_recording_duration, self.frames)
+        # except Exception as e:
+        #     print('ERROR DURING RECORDING:')
+        #     print(e)
+        # try:
+        dB_recording = self.raw_recording_to_dB_recording(raw_recording)
+        # except Exception as e:
+        #     print('ERROR DURING DATA VERWERKING (dB_recording):')
+        #     print(e)
+        # try:
+        plot = Plot()
+        filtered_dB_recording = self.filter_dB(dB_recording)
+        plot.plot_dB_and_filtered(self.test_recording_duration, dB_recording, filtered_dB_recording)
+        # plot.plot_dB(self.test_recording_duration, dB_recording)
+        # plot.plot_Int(self.test_recording_duration, raw_recording)
+        # except Exception as e:
+        #     print('ERROR DURING DATA VISUALISATION (plot.plot_dB):')
+        #     print(e)
         print('End of recording test')
         print('-' * 60)
 
@@ -117,9 +135,24 @@ class Plot:
     def plot_dB(self, duration, dB_recording):
         xpoints = np.linspace(0, duration, len(np.absolute(dB_recording)))
         ypoints = dB_recording
+
         plt.plot(xpoints, ypoints, label='Decibel over tijd')
         plt.title('dB over tijd')
         plt.ylabel('Geluidsniveau [dB]')
+        plt.xlabel('Tijd [s]')
+        plt.show()
+
+
+    def plot_dB_and_filtered(self, duration, dB_recording, filtered_dB_recording):
+        x_dB = np.linspace(0, duration, len(np.absolute(dB_recording)))
+        y_dB = dB_recording
+        x_filtered = np.linspace(0, duration, (len(np.absolute(filtered_dB_recording))))
+        y_filtered = filtered_dB_recording
+
+        plt.plot(x_dB, y_dB, label='Decibel over tijd')
+        plt.plot(x_filtered, y_filtered, label='Gefilterde dB over tijd')
+        plt.title('dB over tijd')
+        plt.ylabel('Geluidsniveau [dB] - lokale extrema')
         plt.xlabel('Tijd [s]')
         plt.show()
 
@@ -128,6 +161,7 @@ class Plot:
     def plot_Int(self, duration, raw_recording):
         xpoints = np.linspace(0, duration, len(np.absolute(raw_recording)))
         ypoints = np.absolute(raw_recording)
+
         plt.plot(xpoints, ypoints, label='I (0 tot 1)')
         plt.title('Intensiteit over tijd')
         plt.ylabel('Intensiteit [W/m2] (0 tot 1)')
