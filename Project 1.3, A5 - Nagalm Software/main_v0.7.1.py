@@ -6,6 +6,7 @@ import sounddevice as sd
 import matplotlib.pyplot as plt
 import csv
 from scipy.signal import argrelextrema
+from scipy.interpolate import make_interp_spline
 
 
 #  de 'main' class houdt alle basis structuur van de code, zoals variabelen en de 'main_loop'
@@ -37,6 +38,8 @@ class Main:
         # TODO: - neem input
         # TODO: - doe opname
         # TODO: - verander in dB
+        # TODO: - bereken nagalmtijd
+        # TODO: - sla data op in .csv
         return dB_recording
 
 
@@ -46,46 +49,18 @@ class Microphone:
         self.frames = 44100             # (Hz): frequentie van opnamen (standaard waarde)
         sd.default.channels = 1    # hoeveel kanelen beschikbaar voor opname (laat 1)
         sd.default.device = 'Microphone (USB Audio Device)'    # selecteren de juiste microfoon
-        self.test_recording_duration = 2   # hoeveel seconde lang is de test_recording
+        self.test_recording_duration = 5   # hoeveel seconde lang is de test_recording
         self.pre_recording_sleep_time = 0.5 # hoelang wachten tot recording start
+        self.data_management = Data_management()
         print(sd.query_devices())
 
 
     # doet een (rauwe) opnamen van geluid voor een bepaald aantal aangegeven secondes ('duration')
     # return: np.array()
     def record_raw(self, duration, frames):
-
         raw_recording = sd.rec(int(frames * duration), samplerate=frames)
         sd.wait()
         return raw_recording
-
-
-    # veranderd de 'raw_recording' naar een gecorigeerde en gekalibreerde dB array
-    # return np.array()
-    def raw_recording_to_dB_recording(self, raw_recording):
-        # verander intensiteit array in absolute waarde intensiteit array
-        intensiteit_ongekalibreerd = np.absolute(raw_recording)
-
-        # gekalibreerde correctie factor die experimenteel is bepaald
-        correctiefactor_experimenteel = 0.99088
-
-        # verander de ongecalibreerde intensiteit waardes naar gecalibreerde gecorigeerde dB waardes
-        dB_recording = (np.log((intensiteit_ongekalibreerd) / (1 * (10 ** -6))) / 0.1141) * correctiefactor_experimenteel
-        return dB_recording
-
-
-    def filter_dB(self, dB_recording):
-        corrected_dB_list = []
-        for item in dB_recording:
-            corrected_dB_list.append(float(item))
-        corrected_dB = np.asarray(corrected_dB_list)
-        print(corrected_dB)
-        corrected_dB[corrected_dB < -1e308] = 0.00001
-        print(corrected_dB)
-        dB_recording_peaks = scipy.signal.find_peaks(corrected_dB, threshold=0.1, height=0.1, distance=600)
-        print(dB_recording_peaks)
-        peaks = corrected_dB[dB_recording_peaks[0]]
-        return peaks
 
 
     def perform_test_recording(self):
@@ -101,13 +76,14 @@ class Microphone:
         #     print('ERROR DURING RECORDING:')
         #     print(e)
         # try:
-        dB_recording = self.raw_recording_to_dB_recording(raw_recording)
+        dB_recording = self.data_management.raw_recording_to_dB_recording(raw_recording)
         # except Exception as e:
         #     print('ERROR DURING DATA VERWERKING (dB_recording):')
         #     print(e)
         # try:
         plot = Plot()
-        filtered_dB_recording = self.filter_dB(dB_recording)
+        filtered_dB_recording = self.data_management.filter_dB(dB_recording)
+        self.data_management.calculate_nagalmtijd(self.test_recording_duration, filtered_dB_recording)
         plot.plot_dB_and_filtered(self.test_recording_duration, dB_recording, filtered_dB_recording)
         # plot.plot_dB(self.test_recording_duration, dB_recording)
         # plot.plot_Int(self.test_recording_duration, raw_recording)
@@ -117,6 +93,72 @@ class Microphone:
         print('End of recording test')
         print('-' * 60)
 
+
+class Data_management:
+    def __init__(self):
+        self.file_naam = 'metingen_pathe_experiment.csv'
+        self.data_opnames = []
+        self.csf_titel = ['meting', 'stoel', 'tijd', 'nagalmtijd', 'x', 'y', 'z']
+        self.nagalmtijd_diff_threschold_percentage = 15 # %
+
+    def save_data(self, new_data):
+
+        # het scrhijven van nieuw lines, oftwel nieuwe data overnemen in de csv file.
+        self.data_opnames.insert(len(self.data_opnames), new_data)
+
+        # het schrijven van de CSV file
+        with open('metingen_pathe_experiment.csv', 'w', encoding='UTF8', newline='') as f:
+            csvwriter = csv.writer(f)
+            csvwriter.writerow(self.csf_titel)
+            csvwriter.writerows(self.data_opnames)
+
+
+    # veranderd de 'raw_recording' naar een gecorigeerde en gekalibreerde dB array
+    # return np.array()
+    def raw_recording_to_dB_recording(self, raw_recording):
+        # verander intensiteit array in absolute waarde intensiteit array
+        intensiteit_ongekalibreerd = np.absolute(raw_recording)
+
+        # gekalibreerde correctie factor die experimenteel is bepaald
+        correctiefactor_experimenteel = 0.99088
+
+        # verander de ongecalibreerde intensiteit waardes naar gecalibreerde gecorigeerde dB waardes
+        dB_recording = (np.log(
+            (intensiteit_ongekalibreerd) / (1 * (10 ** -6))) / 0.1141) * 0.8
+        return dB_recording
+
+
+    # filtert de dB_recording data en zorgt voor een grafiek die de bovenkant van die data volgt
+    # de functie zoekt naar alle 'lokale maxima' en trekt daar een grafiek door
+    def filter_dB(self, dB_recording):
+        corrected_dB_list = []
+        for item in dB_recording:
+            corrected_dB_list.append(float(item))
+        corrected_dB = np.asarray(corrected_dB_list)
+        print(corrected_dB)
+        corrected_dB[corrected_dB < -1e308] = 0.00001
+        print(corrected_dB)
+        dB_recording_peaks = scipy.signal.find_peaks(corrected_dB, height=15, distance=800)
+        print(dB_recording_peaks)
+        filtered_dB_recording = corrected_dB[dB_recording_peaks[0]]
+        return filtered_dB_recording
+
+
+    def calculate_nagalmtijd(self, duration, filtered_dB_recording):
+        x_filtered = np.linspace(0, duration, (len(np.absolute(filtered_dB_recording))))
+        y_filtered = filtered_dB_recording
+        frame_array = []
+        mean = 0
+        for i, filtered_frame in enumerate(y_filtered):
+            time_frame = x_filtered[i]
+            difference_percentage = 100 - (mean/filtered_frame)*100
+            if difference_percentage < self.nagalmtijd_diff_threschold_percentage:
+                frame_array.append(filtered_frame)
+                mean = np.mean(np.asarray(frame_array))
+
+            print(f'mean: {mean}, frame: {filtered_frame} --- difference: {difference_percentage}%')
+            print(f'time: {time_frame}s')
+        # print(filtered_dB_recording)
 
 
 # de 'user_input' class houdt alle functies die er voor nodig zijn om een opname met de microfoon te doen
@@ -174,3 +216,4 @@ main.test_loop()
 
 # mic = Microphone()
 # mic.perform_test_recording()
+
