@@ -49,8 +49,8 @@ class Microphone:
         self.frames = 44100             # (Hz): frequentie van opnamen (standaard waarde)
         sd.default.channels = 1    # hoeveel kanelen beschikbaar voor opname (laat 1)
         sd.default.device = 'Microphone (USB Audio Device)'    # selecteren de juiste microfoon
-        self.test_recording_duration = 5   # hoeveel seconde lang is de test_recording
-        self.pre_recording_sleep_time = 0.5 # hoelang wachten tot recording start
+        self.test_recording_duration = 10   # hoeveel seconde lang is de test_recording
+        self.pre_recording_sleep_time = 1 # hoelang wachten tot recording start
         self.data_management = Data_management()
         print(sd.query_devices())
 
@@ -70,26 +70,16 @@ class Microphone:
         print(f'Recording starts in {self.pre_recording_sleep_time}s')
         time.sleep(self.pre_recording_sleep_time)
         print('Recording...')
-        # try:
+
         raw_recording = self.record_raw(self.test_recording_duration, self.frames)
-        # except Exception as e:
-        #     print('ERROR DURING RECORDING:')
-        #     print(e)
-        # try:
+
         dB_recording = self.data_management.raw_recording_to_dB_recording(raw_recording)
-        # except Exception as e:
-        #     print('ERROR DURING DATA VERWERKING (dB_recording):')
-        #     print(e)
-        # try:
+
         plot = Plot()
         filtered_dB_recording = self.data_management.filter_dB(dB_recording)
-        self.data_management.calculate_nagalmtijd(self.test_recording_duration, filtered_dB_recording)
-        plot.plot_dB_and_filtered(self.test_recording_duration, dB_recording, filtered_dB_recording)
-        # plot.plot_dB(self.test_recording_duration, dB_recording)
-        # plot.plot_Int(self.test_recording_duration, raw_recording)
-        # except Exception as e:
-        #     print('ERROR DURING DATA VISUALISATION (plot.plot_dB):')
-        #     print(e)
+        mean_array, peak_array = self.data_management.calculate_nagalmtijd(self.test_recording_duration, filtered_dB_recording)
+        plot.plot_dB_and_filtered(self.test_recording_duration, dB_recording, filtered_dB_recording, mean_array, peak_array)
+
         print('End of recording test')
         print('-' * 60)
 
@@ -99,8 +89,9 @@ class Data_management:
         self.file_naam = 'metingen_pathe_experiment.csv'
         self.data_opnames = []
         self.csf_titel = ['meting', 'stoel', 'tijd', 'nagalmtijd', 'x', 'y', 'z']
-        self.nagalmtijd_diff_threschold_percentage = 15 # %
+        self.nagalmtijd_diff_threschold_percentage = 10 # %
 
+    # slaat de data van elke meting op in een csv file
     def save_data(self, new_data):
 
         # het scrhijven van nieuw lines, oftwel nieuwe data overnemen in de csv file.
@@ -114,7 +105,6 @@ class Data_management:
 
 
     # veranderd de 'raw_recording' naar een gecorigeerde en gekalibreerde dB array
-    # return np.array()
     def raw_recording_to_dB_recording(self, raw_recording):
         # verander intensiteit array in absolute waarde intensiteit array
         intensiteit_ongekalibreerd = np.absolute(raw_recording)
@@ -138,7 +128,7 @@ class Data_management:
         print(corrected_dB)
         corrected_dB[corrected_dB < -1e308] = 0.00001
         print(corrected_dB)
-        dB_recording_peaks = scipy.signal.find_peaks(corrected_dB, height=15, distance=800)
+        dB_recording_peaks = scipy.signal.find_peaks(corrected_dB, height=30, distance=800)
         print(dB_recording_peaks)
         filtered_dB_recording = corrected_dB[dB_recording_peaks[0]]
         return filtered_dB_recording
@@ -149,15 +139,72 @@ class Data_management:
         y_filtered = filtered_dB_recording
         frame_array = []
         mean = 0
-        for i, filtered_frame in enumerate(y_filtered):
+        mean_list = []
+        mode = ''
+        peak_list = []
+        is_peak_mode = False
+        counted_peak = False
+        peak_counts = 0
+        maximum_dB = 0
+        minimum_dB = 0
+        for i, dB_filtered_frame in enumerate(y_filtered):
             time_frame = x_filtered[i]
-            difference_percentage = 100 - (mean/filtered_frame)*100
-            if difference_percentage < self.nagalmtijd_diff_threschold_percentage:
-                frame_array.append(filtered_frame)
-                mean = np.mean(np.asarray(frame_array))
+            frame_array.append(dB_filtered_frame)
 
-            print(f'mean: {mean}, frame: {filtered_frame} --- difference: {difference_percentage}%')
-            print(f'time: {time_frame}s')
+            difference_from_mean = (dB_filtered_frame - mean)
+            difference_percentage = 100 - (mean/dB_filtered_frame)*100
+
+            mean = np.average(np.asarray(frame_array))
+
+            # check of dB niveau hoger of lager is dan minimum_dB en maximum_dB en verander als dat zo is
+            if dB_filtered_frame > maximum_dB:
+                maximum_dB = dB_filtered_frame
+            if dB_filtered_frame < minimum_dB:
+                minimum_dB = dB_filtered_frame
+
+            # check of er een spike is in dB en of de modus naar DETECT PEAK moet gaan
+            if difference_percentage >= self.nagalmtijd_diff_threschold_percentage:
+                # check of het niet het eerste frame is, negeer de eerste piek op t=0:
+                if time_frame == 0:
+
+                    mode = 'NORMAL'
+                    mean_list.append(mean)
+                    peak_list.append(None)
+                    is_peak_mode = False
+                    counted_peak = False
+                else:
+                    mode = 'PEAK DETECTION'
+                    mean_list.append(None)
+                    peak_list.append(dB_filtered_frame)
+                    is_peak_mode = True
+            else:
+                mode = 'NORMAL'
+                mean_list.append(mean)
+                peak_list.append(None)
+                is_peak_mode = False
+                counted_peak = False
+
+            # telt hoeveel pieks er zijn gemeten
+            if is_peak_mode and counted_peak != True:
+                peak_counts += 1
+                counted_peak = True
+                is_peak_mode = False
+
+            print(f''
+                  f'mean: {round(mean, 2)}, '
+                  f'dB: {round(dB_filtered_frame, 2)}, '
+                  f't: {round(time_frame, 2)}s --- '
+                  f'diff: {round(difference_from_mean, 2)} ({round(difference_percentage, 2)}%) --- '
+                  f'MODE: [{mode}]')
+
+        # print klein rapport aan het einde van de berekeningen
+        print('-'*60)
+        print(f'COUNTED PEAKS: {peak_counts}x')
+        print(f'\nMINIMUM dB: {minimum_dB}dB')
+        print(f'MAXIMUM dB: {maximum_dB}dB')
+        mean_array = np.asarray(mean_list)
+        peak_array = np.asarray(peak_list)
+        return mean_array, peak_array
         # print(filtered_dB_recording)
 
 
@@ -185,17 +232,28 @@ class Plot:
         plt.show()
 
 
-    def plot_dB_and_filtered(self, duration, dB_recording, filtered_dB_recording):
+    def plot_dB_and_filtered(self, duration, dB_recording, filtered_dB_recording, mean_array, peak_array):
         x_dB = np.linspace(0, duration, len(np.absolute(dB_recording)))
         y_dB = dB_recording
         x_filtered = np.linspace(0, duration, (len(np.absolute(filtered_dB_recording))))
         y_filtered = filtered_dB_recording
 
-        plt.plot(x_dB, y_dB, label='Decibel over tijd')
-        plt.plot(x_filtered, y_filtered, label='Gefilterde dB over tijd')
-        plt.title('dB over tijd')
-        plt.ylabel('Geluidsniveau [dB] - lokale extrema')
-        plt.xlabel('Tijd [s]')
+
+
+
+        plt.plot(x_dB, y_dB, label='Ongefilterde dB opname', color='lightgray')
+        plt.plot(x_filtered, y_filtered, label='Gefilterde dB opname', color='blue')
+        plt.plot(x_filtered, mean_array, label='dB gemiddelde', color='orange')
+        plt.plot(x_filtered, peak_array, 'r--', label='PEAK DETECTION', color='red')
+        plt.plot(x_filtered, peak_array, marker='1', color='red')
+        # plt.set_facecolor("darkgray")
+
+        plt.legend()
+        plt.title('dB tegen tijd grafiek')
+        plt.ylabel('Geluidsniveau [dB] →')
+        plt.xlabel('Tijd [s] →')
+
+        plt.rcParams["figure.figsize"] = (60,10)
         plt.show()
 
 
