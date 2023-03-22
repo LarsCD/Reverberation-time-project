@@ -5,6 +5,7 @@ import scipy.ndimage
 import sounddevice as sd
 import matplotlib.pyplot as plt
 import csv
+import os
 from scipy.optimize import curve_fit
 
 
@@ -12,22 +13,43 @@ from scipy.optimize import curve_fit
 class Main:
     def __init__(self):
         self.run_program = True
+        self.data_man = Data_management()
         # TODO: add variables
 
 
     # 'main_loop' is de hoofd-loop die het programma laat draaien
     def main_loop(self):
         # zolang 'self.run_program' True is, blijft 'main_loop' draaien
+        duration = 0
+        i = 1
+        valid1 = False
+        while valid1 != True:
+            try:
+                duration = float(input('Voor tijdsduur per meting in (seconde): '))
+            except:
+                valid1 = False
+            else:
+                valid1 = True
         while self.run_program == True:
-            pass
-        # TODO: code
+            try:
+                mic = Microphone()
+                RT60 = mic.perform_recording(duration)
+                save_data_question = input(f'Save meting? (y/..) (RT60: {RT60})s: ')
+            except Exception as e:
+                print(f'\n!ERROR: RECORDING ERROR\n{e}')
+            if save_data_question == 'y':
+                try:
+                    stoel = input('Voer stoel #nr in (naam): ')
+                    x = input('x: ')
+                    y = input('y: ')
+                    z = input('z: ')
+                    data = [f'Meting {i}', stoel, duration, RT60, x, y, z]
+                    self.data_man.save_data(data)
+                    click = input('Meting opgeslagen!')
+                    i += 1
+                except Exception as e:
+                    print(f'\n!ERROR: DATA SAVING ERROR\n{e}')
 
-
-    # gebruik voor veel testjes achter elkaar doen
-    def test_loop(self):
-        while self.run_program == True:
-            mic = Microphone()
-            mic.perform_test_recording()
 
 
     #  de 'recording_loop' is de loop die wordt re-runt voor elke enkele meting
@@ -62,13 +84,14 @@ class Microphone:
         return raw_recording
 
 
-    def perform_test_recording(self):
+    def perform_recording(self, duration):
+        self.test_recording_duration = int(duration)
         print('-'*60)
         print('Started recording test')
-        click = input(f'[ENTER]: START RECORDIING ({self.test_recording_duration}s)')
+        click = input(f'[ENTER]: START OPNAME ({self.test_recording_duration}s)')
         print(f'Recording starts in {self.pre_recording_sleep_time}s')
         time.sleep(self.pre_recording_sleep_time)
-        print('Recording...')
+        print('Opnemen...')
 
         raw_recording = self.record_raw(self.test_recording_duration, self.frames)
 
@@ -76,17 +99,17 @@ class Microphone:
 
         plot = Plot()
         filtered_dB_recording = self.data_management.filter_dB(dB_recording)
-        mean_array, peak_array, data_message_string = self.data_management.calculate_nagalmtijd(self.test_recording_duration, filtered_dB_recording, raw_recording)
+        mean_array, peak_array, data_message_string, RT60 = self.data_management.calculate_nagalmtijd(self.test_recording_duration, filtered_dB_recording, raw_recording)
         plot.plot_dB_and_filtered(self.test_recording_duration, dB_recording, filtered_dB_recording, mean_array, peak_array, data_message_string)
-        plot.plot_Int(self.test_recording_duration, raw_recording)
-
-        print('End of recording test')
-        print('-' * 60)
+        # plot.plot_Int(self.test_recording_duration, raw_recording)
+        return RT60
 
 
 class Data_management:
     def __init__(self):
         self.file_naam = 'metingen_pathe_experiment.csv'
+        while os.path.isfile('./' + self.file_naam):
+            self.file_naam += '(1)'
         self.data_opnames = []
         self.csf_titel = ['meting', 'stoel', 'tijd', 'nagalmtijd', 'x', 'y', 'z']
         self.nagalmtijd_diff_threschold_percentage = 5 # %
@@ -98,7 +121,7 @@ class Data_management:
         self.data_opnames.insert(len(self.data_opnames), new_data)
 
         # het schrijven van de CSV file
-        with open('metingen_pathe_experiment.csv', 'w', encoding='UTF8', newline='') as f:
+        with open(self.file_naam, 'w', encoding='UTF8', newline='') as f:
             csvwriter = csv.writer(f)
             csvwriter.writerow(self.csf_titel)
             csvwriter.writerows(self.data_opnames)
@@ -139,6 +162,7 @@ class Data_management:
         # functie variabelen
         tRT20 = 0
         tRT30 = 0
+        RT60 = 0
 
         def func(x, a, b):
             return a * x + b
@@ -152,28 +176,32 @@ class Data_management:
         rt30_dB = max_dB - 30
 
         # maak een linear fit van x en y
-        popt = curve_fit(func, x, y)
-
-        # a en b uit formule halen
-        a = popt[0][0]
-        b = popt[1][0]
-
-        # algebrarisch berekeningen voor tijd tot RT20 en RT30
-        t0 = ((max_dB-b)/a)
-        if rt20_dB > 0:
-            tRT20 = ((rt20_dB-b)/a)
+        try:
+            popt = curve_fit(func, x, y)
+        except:
+            print('\n!ERROR: CAN NOT PERFORM RT60 CALCULATION')
+            return RT60
         else:
-            print(f'WARNING: COULD NOT CALCULATE RT20; (RT20_dB={rt20_dB})')
-        if rt30_dB > 0:
-            tRT30 = ((rt30_dB-b)/a)
-        else:
-            print(f'WARNING: COULD NOT CALCULATE RT30; (RT30_dB={rt30_dB})')
-        RT20 = tRT20 - t0
-        RT30 = tRT30 - t0
+            # a en b uit formule halen
+            a = popt[0][0]
+            b = popt[1][0]
 
-        # neem gemmidelde van RT20 + RT30 om RT60 te berekenen
-        RT60 = ((RT20*2)+(RT30*2))/2
-        return RT60
+            # algebrarisch berekeningen voor tijd tot RT20 en RT30
+            t0 = ((max_dB-b)/a)
+            if rt20_dB > 0:
+                tRT20 = ((rt20_dB-b)/a)
+            else:
+                print(f'WARNING: COULD NOT CALCULATE RT20; (RT20_dB={rt20_dB})')
+            if rt30_dB > 0:
+                tRT30 = ((rt30_dB-b)/a)
+            else:
+                print(f'WARNING: COULD NOT CALCULATE RT30; (RT30_dB={rt30_dB})')
+            RT20 = tRT20 - t0
+            RT30 = tRT30 - t0
+
+            # neem gemmidelde van RT20 + RT30 om RT60 te berekenen
+            RT60 = ((RT20*2)+(RT30*2))/2
+            return RT60
 
 
     def calculate_nagalmtijd(self, duration, filtered_dB_recording, raw_recording):
@@ -300,7 +328,7 @@ class Data_management:
 
         mean_array = np.asarray(mean_list)
         peak_array = np.asarray(peak_list)
-        return mean_array, peak_array, data_message_string
+        return mean_array, peak_array, data_message_string, RT60
         # print(filtered_dB_recording)
 
 
@@ -366,7 +394,7 @@ class Plot:
 
 
 main = Main()
-main.test_loop()
+main.main_loop()
 
 # mic = Microphone()
 # mic.perform_test_recording()
