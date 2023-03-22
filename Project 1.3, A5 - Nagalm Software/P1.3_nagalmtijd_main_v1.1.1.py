@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import csv
 import os
 from scipy.optimize import curve_fit
+import datetime
 
 
 #  de 'main' class houdt alle basis structuur van de code, zoals variabelen en de 'main_loop'
@@ -43,7 +44,8 @@ class Main:
                     x = input('x: ')
                     y = input('y: ')
                     z = input('z: ')
-                    data = [f'Meting {i}', stoel, duration, RT60, x, y, z]
+                    time_now = datetime.datetime.now()
+                    data = [f'Meting {i}', stoel, time_now, RT60, x, y, z]
                     self.data_man.save_data(data)
                     click = input('Meting opgeslagen!')
                     i += 1
