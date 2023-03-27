@@ -34,7 +34,7 @@ class Main:
         while self.run_program == True:
             try:
                 mic = Microphone()
-                RT60 = mic.perform_recording(duration)
+                RT60, raw_recording = mic.perform_recording(duration)
                 save_data_question = input(f'Save meting? (y/..) (RT60: {RT60})s: ')
             except Exception as e:
                 print(f'\n!ERROR: RECORDING ERROR\n{e}')
@@ -45,7 +45,7 @@ class Main:
                     y = input('y: ')
                     z = input('z: ')
                     time_now = datetime.datetime.now()
-                    data = [f'Meting {i}', stoel, time_now, RT60, x, y, z]
+                    data = [f'Meting {i}', stoel, time_now, RT60, raw_recording, x, y, z]
                     self.data_man.save_data(data)
                     click = input('Meting opgeslagen!')
                     i += 1
@@ -85,7 +85,6 @@ class Microphone:
         sd.wait()
         return raw_recording
 
-
     def perform_recording(self, duration):
         self.test_recording_duration = int(duration)
         print('-'*60)
@@ -95,7 +94,7 @@ class Microphone:
         time.sleep(self.pre_recording_sleep_time)
         print('Opnemen...')
 
-        raw_recording = self.record_raw(self.test_recording_duration, self.frames)
+        raw_recording = self.record_raw()
 
         dB_recording = self.data_management.raw_recording_to_dB_recording(raw_recording)
 
@@ -104,7 +103,30 @@ class Microphone:
         mean_array, peak_array, data_message_string, RT60 = self.data_management.calculate_nagalmtijd(self.test_recording_duration, filtered_dB_recording, raw_recording)
         plot.plot_dB_and_filtered(self.test_recording_duration, dB_recording, filtered_dB_recording, mean_array, peak_array, data_message_string)
         # plot.plot_Int(self.test_recording_duration, raw_recording)
-        return RT60
+        return RT60, raw_recording
+
+
+    def fix_recording_data(self):
+
+        file_name = 'metingen_pathe_experiment.csv(1)(1)(1)'
+        data_opnames = []
+        with open(file_name, 'r') as file:
+            csv_reader = csv.reader(file)
+            data_set = []
+            for meting in csv_reader:
+                data_set.append(meting)
+        csf_titel = ['Stoel', 'Tijd', 'Nagalmtijd', 'x', 'y', 'z']
+        for meting_index in range(1, len(data_set)):
+            RT60_FOUT = float(data_set[meting_index][3])
+            RT60 = RT60_FOUT*1.2
+
+            print(f'RT60 (fout): {data_set[meting_index][3]} - RT60 (goed): {RT60}')
+            data_opnames.append([data_set[meting_index][1], data_set[meting_index][2], RT60, data_set[meting_index][5], data_set[meting_index][6], data_set[meting_index][7]])
+        file_name_save = 'gefixte_pathe_meting_3.csv'
+        with open(file_name_save, 'w', encoding='UTF8', newline='') as f:
+            csvwriter = csv.writer(f)
+            csvwriter.writerow(csf_titel)
+            csvwriter.writerows(data_opnames)
 
 
 class Data_management:
@@ -113,15 +135,16 @@ class Data_management:
         while os.path.isfile('./' + self.file_naam):
             self.file_naam += '(1)'
         self.data_opnames = []
-        self.csf_titel = ['meting', 'stoel', 'tijd', 'nagalmtijd', 'x', 'y', 'z']
+        self.csf_titel = ['meting', 'stoel', 'tijd', 'nagalmtijd', 'raw_recording', 'x', 'y', 'z']
         self.nagalmtijd_diff_threschold_percentage = 5 # %
+        self.dB_mean_gain = 0
+
 
     # slaat de data van elke meting op in een csv file
     def save_data(self, new_data):
 
         # het scrhijven van nieuw lines, oftwel nieuwe data overnemen in de csv file.
         self.data_opnames.insert(len(self.data_opnames), new_data)
-
         # het schrijven van de CSV file
         with open(self.file_naam, 'w', encoding='UTF8', newline='') as f:
             csvwriter = csv.writer(f)
@@ -202,7 +225,7 @@ class Data_management:
             RT30 = tRT30 - t0
 
             # neem gemmidelde van RT20 + RT30 om RT60 te berekenen
-            RT60 = ((RT20*2)+(RT30*2))/2
+            RT60 = ((RT20*3)+(RT30*2))/2
             return RT60
 
 
@@ -245,7 +268,7 @@ class Data_management:
             frame_array.append(dB_filtered_frame)
 
             # bereken gemiddelde
-            mean = np.mean(np.asarray(frame_array))
+            mean = np.mean(np.asarray(frame_array)) + self.dB_mean_gain
 
             # bereken verschil van frame t.o.v. het gemiddelde
             difference_from_mean = (dB_filtered_frame - mean)
@@ -394,10 +417,17 @@ class Plot:
         plt.xlabel('Tijd [s]')
         plt.show()
 
+#
+# file_name = 'metingen_pathe_experiment.csv'
+# with open(file_name, 'r') as file:
+#     data = csv.reader(file)
+#     for i in data:
+#         print(i)
 
-main = Main()
-main.main_loop()
+# main = Main()
+# main.main_loop()
 
-# mic = Microphone()
-# mic.perform_test_recording()
+
+mic = Microphone()
+mic.fix_recording_data()
 
