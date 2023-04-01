@@ -1,5 +1,5 @@
-# Project 1.3 - Groep A5 - Nagalmtijd Software v1.3.1
-# Contributors: Lars Dijkgraaf, Kaylee Pond
+# Project 1.3 - Groep A5 - Nagalmtijd Software v1.3.2
+# Contributors: Lars Dijkgraaf, Kaylee Pont
 # Version release date: 27/3/2023
 
 import time
@@ -74,7 +74,8 @@ class Microphone:
     def __init__(self):
         self.frames = 44100                 # (Hz): frequentie van opnamen (standaard waarde)
         sd.default.channels = 1             # hoeveel kanelen beschikbaar voor opname (laat 1)
-        sd.default.device = 'Microphone (USB Audio Device)'     # selecteren de juiste microfoon
+        sd.default.device = 'Microphone (Realtek(R) Audio)'     # selecteren de juiste microfoon
+        print(sd.query_devices())
         self.test_recording_duration = 5    # hoeveel seconde lang is de test_recording
         self.pre_recording_sleep_time = 1   # hoelang wachten tot recording start
         self.data_management = Data_management()
