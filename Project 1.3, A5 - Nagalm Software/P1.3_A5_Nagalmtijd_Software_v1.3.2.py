@@ -1,6 +1,6 @@
 # Project 1.3 - Groep A5 - Nagalmtijd Software v1.3.2
 # Contributors: Lars Dijkgraaf, Kaylee Pont
-# Version release date: 27/3/2023
+# Version release date: 1/4/2023
 
 import time
 import numpy as np
